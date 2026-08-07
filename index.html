@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="CS/styles.css">
+<link rel="stylesheet" href="styles.css">
 
 </head>
 <body>
@@ -52,15 +52,11 @@
 
       <div class="section">
         <h2><svg class="icon" viewBox="0 0 24 24"><path d="M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>Parametry trasy</h2>
-        <div class="field-grid2">
-          <div class="field-row"><label class="field-label">Ilość audytorów</label><input type="number" id="auditorsInput" value="1" min="1" max="20"></div>
-          <div class="field-row"><label class="field-label">Czas audytu (min)</label><input type="number" id="auditMinInput" value="60" min="5" step="5"></div>
-        </div>
-        <div class="field-row"><label class="field-label">Maks. godz. / dzień</label><input type="number" id="dailyCapInput" value="12" min="1" max="24"></div>
+        <div class="field-row"><label class="field-label">Ilość audytorów</label><input type="number" id="auditorsInput" value="1" min="1" max="20"></div>
         <div class="field-row"><label class="field-label">Lokalizacja bazy</label><input type="text" id="baseInput" placeholder="np. ul. Marszałkowska 1, Warszawa"></div>
         <div class="field-row" id="auditorsNamesWrap"></div>
         <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-muted);margin-top:4px;"><input type="checkbox" id="roundtripCheck" style="accent-color:var(--red);width:15px;height:15px;">Wlicz powrót do bazy</label>
-        <p class="hint">Budżety tras (1/2/3 dni) to wielokrotności wartości „Maks. godz. / dzień".</p>
+        <p class="hint">Limity czasu są ustalone automatycznie zgodnie z zasadami delegacji.</p>
         <button class="primary" id="buildBtn" style="width:100%;margin-top:10px;"><svg class="icon" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Zbuduj trasy</button>
       </div>
 
@@ -110,7 +106,7 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="script.js"/script>
+<script src="script.js?v=10.1"></script>
 
 </body>
 </html>
