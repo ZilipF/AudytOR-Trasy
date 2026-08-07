@@ -90,7 +90,7 @@ if (loaded) {
 
   var map = L.map('map', { zoomControl: true }).setView([52.0693,19.4803], 6.3); 
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:19 }).addTo(map); 
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom:19 }).addTo(map); 
 
   var markersLayer = L.layerGroup().addTo(map); 
 
@@ -868,7 +868,7 @@ state = {
 
   
 
-  // ================= MATRIX + GREEDY BUILDER ================= 
+  // ================= MATRIX + FEASIBLE ROUTE ENGINE ================= 
 
   function fetchTable(coordsArr){ 
 
@@ -900,444 +900,307 @@ state = {
 
   } 
 
-function clusterStations(stations, k){ 
-
-  
-
-  if(stations.length <= k){ 
-
-    return stations.map(function(s){ 
-
-      return [s]; 
-
-    }); 
-
-  } 
-
-  
-
-  var centroids = stations 
-
-    .slice(0, k) 
-
-    .map(function(s){ 
-
-      return { 
-
-        lat: s.lat, 
-
-        lng: s.lng 
-
-      }; 
-
-    }); 
-
-  
-
-  for(var iter=0; iter<10; iter++){ 
-
-  
-
-    var groups = []; 
-
-  
-
-    for(var i=0; i<k; i++){ 
-
-      groups.push([]); 
-
-    } 
-
-  
-
-    stations.forEach(function(st){ 
-
-  
-
-      var best = 0; 
-
-      var bestDist = Infinity; 
-
-  
-
-      centroids.forEach(function(c, idx){ 
-
-  
-
-        var d = 
-
-          Math.pow(st.lat - c.lat, 2) + 
-
-          Math.pow(st.lng - c.lng, 2); 
-
-  
-
-        if(d < bestDist){ 
-
-          bestDist = d; 
-
-          best = idx; 
-
-        } 
-
-      }); 
-
-  
-
-      groups[best].push(st); 
-
-    }); 
-
-  
-
-    groups.forEach(function(group, idx){ 
-
-  
-
-      if(group.length === 0){ 
-
-        return; 
-
-      } 
-
-  
-
-      var avgLat = 
-
-        group.reduce(function(a,s){ 
-
-          return a+s.lat; 
-
-        },0) / group.length; 
-
-  
-
-      var avgLng = 
-
-        group.reduce(function(a,s){ 
-
-          return a+s.lng; 
-
-        },0) / group.length; 
-
-  
-
-      centroids[idx] = { 
-
-        lat: avgLat, 
-
-        lng: avgLng 
-
-      }; 
-
-    }); 
-
-  } 
-
-  
-
-  return groups; 
-
-} 
-
-  function greedyBuild(originIdx, durMatrix, distMatrix, candidates, auditMin, budgetMin){ 
-
-  
-
-    var route=[originIdx]; 
-
-    var pool=candidates.slice(); 
-
-    var totalMin=0; 
-
-  
-
-    while(pool.length){ 
-
-  
-
-  var chosenCi = -1; 
-
-  var chosenPos = -1; 
-
-  var chosenDelta = Infinity; 
-
-  var chosenScore = -Infinity; 
-
-  
-
-  for(var ci=0; ci<pool.length; ci++){ 
-
-  
-
-  var cand = pool[ci]; 
-
-  
-
-  var bestPos = -1; 
-
-  var bestDelta = Infinity; 
-
-  var bestScore = -Infinity; 
-
-  
-
-  for(var pos=0; pos<route.length; pos++){ 
-
-  
-
-    var prev = route[pos]; 
-
-    var next = (pos+1<route.length) 
-
-      ? route[pos+1] 
-
-      : null; 
-
-  
-
-    var delta; 
-
-  
-
-    if(next!==null){ 
-
-      delta = 
-
-        durMatrix[prev][cand.idx] + 
-
-        durMatrix[cand.idx][next] - 
-
-        durMatrix[prev][next]; 
-
-    }else{ 
-
-      delta = 
-
-        durMatrix[prev][cand.idx]; 
-
-    } 
-
-  
-
-    var score = 
-
-      (cand.station.risk + 1) / 
-
-      Math.max(delta/60,1); 
-
-  
-
-    if(score > bestScore){ 
-
-      bestScore = score; 
-
-      bestDelta = delta; 
-
-      bestPos = pos; 
-
-    } 
-
-  } 
-
-  
-
-  var prospective = 
-
-    totalMin + 
-
-    (bestDelta/60) + 
-
-    auditMin; 
-
-  
-
-  if( 
-
-    prospective <= budgetMin && 
-
-    bestScore > chosenScore 
-
-  ){ 
-
-    chosenScore = bestScore; 
-
-    chosenCi = ci; 
-
-    chosenPos = bestPos; 
-
-    chosenDelta = bestDelta; 
-
-  } 
-
-} 
-
-  
-
-if(chosenCi === -1){ 
-
-  break; 
-
-} 
-
-  
-
-var chosenStation = pool[chosenCi]; 
-
-  
-
-route.splice( 
-
-  chosenPos + 1, 
-
-  0, 
-
-  chosenStation.idx 
-
-); 
-
-  
-
-totalMin += 
-
-  (chosenDelta / 60) + 
-
-  auditMin; 
-
-  
-
-pool.splice(chosenCi, 1); 
-
-  
-
-} // koniec while 
-
-  
-
-return { 
-
-  order: route, 
-
-  totalMin: totalMin 
-
-}; 
-
-} 
-
-function twoOpt(order, durMatrix){ 
-
-  
-
-  var improved = true; 
-
-  
-
-  while(improved){ 
-
-  
-
-    improved = false; 
-
-  
-
-    for(var i = 1; i < order.length - 2; i++){ 
-
-  
-
-      for(var j = i + 1; j < order.length - 1; j++){ 
-
-  
-
-        var a = order[i - 1]; 
-
-        var b = order[i]; 
-
-  
-
-        var c = order[j]; 
-
-        var d = order[j + 1]; 
-
-  
-
-        var current = 
-
-          durMatrix[a][b] + 
-
-          durMatrix[c][d]; 
-
-  
-
-        var alternative = 
-
-          durMatrix[a][c] + 
-
-          durMatrix[b][d]; 
-
-  
-
-        if(alternative < current){ 
-
-  
-
-          var reversed = 
-
-            order.slice(i, j + 1).reverse(); 
-
-  
-
-          order.splice( 
-
-            i, 
-
-            j - i + 1, 
-
-            ...reversed 
-
-          ); 
-
-  
-
-          improved = true; 
-
-        } 
-
-      } 
-
-    } 
-
-  } 
-
-  
-
-  return order; 
-
-} 
-
-  function buildDayBreakdown(orderedStations, legsMin, auditMin, dailyCapMin){ 
-
-    var day=1, running=0, breakdown=[]; 
-
-    orderedStations.forEach(function(s,idx){ 
-
-      var legMin = legsMin[idx] || 0; 
-
-      var add = legMin+auditMin; 
-
-      if(running>0 && running+add>dailyCapMin){ day++; running=0; } 
-
-      running+=add; 
-
-      breakdown.push(day); 
-
-    }); 
-
-    return breakdown; 
-
-  } 
-
-  
-
+function geoKm(a, b){
+  var rad = Math.PI / 180;
+  var dLat = (b.lat - a.lat) * rad;
+  var dLng = (b.lng - a.lng) * rad;
+  var lat1 = a.lat * rad;
+  var lat2 = b.lat * rad;
+  var h = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng/2) * Math.sin(dLng/2);
+  return 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1-h));
+}
+
+function groupCenter(group){
+  if(!group.length){ return null; }
+  return {
+    lat: group.reduce(function(sum, station){ return sum + station.lat; }, 0) / group.length,
+    lng: group.reduce(function(sum, station){ return sum + station.lng; }, 0) / group.length
+  };
+}
+
+function clusterStations(stations, k){
+  if(stations.length <= k){ return stations.map(function(station){ return [station]; }); }
+
+  var sorted = stations.slice().sort(function(a,b){
+    return (b.risk || 0) - (a.risk || 0);
+  });
+  var seeds = [sorted[0]];
+
+  while(seeds.length < k){
+    var nextSeed = null;
+    var bestMinDistance = -1;
+    sorted.forEach(function(station){
+      if(seeds.indexOf(station) !== -1){ return; }
+      var minDistance = Math.min.apply(null, seeds.map(function(seed){
+        return geoKm(station, seed);
+      }));
+      if(minDistance > bestMinDistance){
+        bestMinDistance = minDistance;
+        nextSeed = station;
+      }
+    });
+    if(!nextSeed){ break; }
+    seeds.push(nextSeed);
+  }
+
+  var groups = seeds.map(function(seed){ return [seed]; });
+  var assigned = {};
+  seeds.forEach(function(seed){ assigned[seed.id] = true; });
+
+  sorted.forEach(function(station){
+    if(assigned[station.id]){ return; }
+    var bestGroup = 0;
+    var bestScore = Infinity;
+
+    groups.forEach(function(group, idx){
+      var center = groupCenter(group) || seeds[idx];
+      var distance = geoKm(station, center);
+      var activeMinutes = group.length * 120;
+      var riskLoad = group.reduce(function(sum, item){ return sum + (item.risk || 0); }, 0);
+      var loadPenalty = (activeMinutes / 60) * 8 + group.length * 12 + riskLoad * 0.15;
+      var score = distance + loadPenalty;
+      if(score < bestScore){
+        bestScore = score;
+        bestGroup = idx;
+      }
+    });
+
+    groups[bestGroup].push(station);
+  });
+
+  return groups.filter(function(group){ return group.length > 0; });
+}
+
+    function stationByIdx(candidates, idx){
+    for(var i=0; i<candidates.length; i++){
+      if(candidates[i].idx === idx){ return candidates[i]; }
+    }
+    return null;
+  }
+
+  function routeRisk(order, candidates){
+    var total = 0;
+    for(var i=1; i<order.length; i++){
+      var candidate = stationByIdx(candidates, order[i]);
+      total += candidate ? (candidate.station.risk || 0) : 0;
+    }
+    return total;
+  }
+
+  function planQuality(order, schedule, candidates){
+    if(!schedule){ return -Infinity; }
+    var risk = routeRisk(order, candidates);
+    var stationCount = order.length - 1;
+    var lastDayAudits = schedule.breakdown.filter(function(day){
+      return day === schedule.dayTotals.length;
+    }).length;
+    var imbalance = 0;
+    for(var i=1; i<schedule.dayTotals.length; i++){
+      if(schedule.dayTotals[i] > schedule.dayTotals[i-1]){
+        imbalance += schedule.dayTotals[i] - schedule.dayTotals[i-1];
+      }
+    }
+    return (risk * 10000) + (stationCount * 800) - schedule.totalMin -
+      (lastDayAudits * 120) - (imbalance * 0.35);
+  }
+
+  function tryInsertEverywhere(order, candidateIdx, durMatrix, auditMin, days, candidates){
+    var best = null;
+    for(var pos=1; pos<=order.length; pos++){
+      var draft = order.slice();
+      draft.splice(pos, 0, candidateIdx);
+      var schedule = evaluateSchedule(draft, durMatrix, auditMin, days);
+      if(!schedule){ continue; }
+      var quality = planQuality(draft, schedule, candidates);
+      if(!best || quality > best.quality){
+        best = { order:draft, schedule:schedule, quality:quality };
+      }
+    }
+    return best;
+  }
+
+  function constructFeasibleRoute(candidates, durMatrix, distMatrix, auditMin, days){
+    var eligible = candidates.filter(function(candidate){
+      var baseKm = (distMatrix[0][candidate.idx] || 0) / 1000;
+      return days === 1 || baseKm > 100;
+    });
+    if(!eligible.length){ return null; }
+
+    var seedCandidates = eligible.slice().sort(function(a,b){
+      var riskDiff = (b.station.risk || 0) - (a.station.risk || 0);
+      if(riskDiff !== 0){ return riskDiff; }
+      return durMatrix[0][a.idx] - durMatrix[0][b.idx];
+    }).slice(0, Math.min(8, eligible.length));
+
+    var bestPlan = null;
+    seedCandidates.forEach(function(seed){
+      var order = [0, seed.idx];
+      var schedule = evaluateSchedule(order, durMatrix, auditMin, days);
+      if(!schedule){ return; }
+
+      var used = {};
+      used[seed.idx] = true;
+      var changed = true;
+
+      while(changed){
+        changed = false;
+        var bestInsertion = null;
+
+        eligible.forEach(function(candidate){
+          if(used[candidate.idx]){ return; }
+          var insertion = tryInsertEverywhere(
+            order, candidate.idx, durMatrix, auditMin, days, candidates
+          );
+          if(!insertion){ return; }
+
+          var currentQuality = planQuality(order, schedule, candidates);
+          var gain = insertion.quality - currentQuality;
+          var detourPenalty = Math.max(0, insertion.schedule.totalMin - schedule.totalMin);
+          var priority = candidate.station.risk || 0;
+          var selectionScore = (priority * 1000) + gain - (detourPenalty * 0.25);
+
+          if(!bestInsertion || selectionScore > bestInsertion.selectionScore){
+            bestInsertion = {
+              candidate:candidate,
+              order:insertion.order,
+              schedule:insertion.schedule,
+              quality:insertion.quality,
+              selectionScore:selectionScore
+            };
+          }
+        });
+
+        if(bestInsertion){
+          order = bestInsertion.order;
+          schedule = bestInsertion.schedule;
+          used[bestInsertion.candidate.idx] = true;
+          changed = true;
+        }
+      }
+
+      var improved = improveFeasibleOrder(order, durMatrix, auditMin, days, candidates);
+      order = improved.order;
+      schedule = improved.schedule;
+      var quality = planQuality(order, schedule, candidates);
+
+      if(!bestPlan || quality > bestPlan.quality){
+        bestPlan = { order:order, schedule:schedule, quality:quality };
+      }
+    });
+
+    return bestPlan;
+  }
+
+  function improveFeasibleOrder(order, durMatrix, auditMin, days, candidates){
+    var bestOrder = order.slice();
+    var bestSchedule = evaluateSchedule(bestOrder, durMatrix, auditMin, days);
+    var bestQuality = planQuality(bestOrder, bestSchedule, candidates);
+    var improved = true;
+    var rounds = 0;
+
+    while(improved && rounds < 6){
+      improved = false;
+      rounds++;
+      for(var i=1; i<bestOrder.length-1; i++){
+        for(var j=i+1; j<bestOrder.length; j++){
+          var draft = bestOrder.slice();
+          var reversed = draft.slice(i, j+1).reverse();
+          draft.splice.apply(draft, [i, j-i+1].concat(reversed));
+          var schedule = evaluateSchedule(draft, durMatrix, auditMin, days);
+          if(!schedule){ continue; }
+          var quality = planQuality(draft, schedule, candidates);
+          if(quality > bestQuality){
+            bestOrder = draft;
+            bestSchedule = schedule;
+            bestQuality = quality;
+            improved = true;
+          }
+        }
+      }
+    }
+
+    return { order:bestOrder, schedule:bestSchedule, quality:bestQuality };
+  }
+
+  var BASE_DAY_MIN = 8 * 60;
+  var MAX_DAY_MIN = 11 * 60;
+  var BREAK_MIN = 60;
+
+  function calcBreakMin(activeMin){
+    return activeMin > 0 ? BREAK_MIN : 0;
+  }
+
+  function evaluateSchedule(orderedIdx, durMatrix, auditMin, days){
+    if(!orderedIdx || orderedIdx.length < 2){ return null; }
+
+    var maxTotalMin = days * BASE_DAY_MIN;
+    var stationCount = orderedIdx.length - 1;
+    var services = [];
+
+    for(var i=1; i<orderedIdx.length; i++){
+      services.push({
+        stationIdx: orderedIdx[i],
+        legMin: durMatrix[orderedIdx[i-1]][orderedIdx[i]] / 60,
+        workMin: (durMatrix[orderedIdx[i-1]][orderedIdx[i]] / 60) + auditMin
+      });
+    }
+
+    var returnMin = durMatrix[orderedIdx[orderedIdx.length-1]][0] / 60;
+    var best = null;
+
+    function inspectSplit(cuts){
+      var dayActive = [];
+      var dayBreak = [];
+      var start = 0;
+
+      for(var day=0; day<days; day++){
+        var end = day < cuts.length ? cuts[day] : stationCount;
+        var active = 0;
+        for(var j=start; j<end; j++) active += services[j].workMin;
+        dayActive.push(active);
+        for(var k=start; k<end; k++) dayBreak[k] = day + 1;
+        start = end;
+      }
+
+      dayActive[days-1] += returnMin;
+      var dayTotals = dayActive.map(function(active){
+        return active + calcBreakMin(active);
+      });
+      var totalMin = dayTotals.reduce(function(sum, value){ return sum + value; }, 0);
+
+      if(dayTotals.some(function(value){ return value > MAX_DAY_MIN; })) return;
+      if(totalMin > maxTotalMin) return;
+
+      var lastDayAuditCount = dayBreak.filter(function(value){ return value === days; }).length;
+      var score = totalMin + (lastDayAuditCount * 45);
+      for(var d=1; d<dayTotals.length; d++){
+        if(dayTotals[d] > dayTotals[d-1]) score += (dayTotals[d] - dayTotals[d-1]) * 0.25;
+      }
+
+      if(!best || score < best.score){
+        best = {
+          score: score,
+          breakdown: dayBreak,
+          dayTotals: dayTotals,
+          totalMin: totalMin,
+          returnMin: returnMin
+        };
+      }
+    }
+
+    if(days === 1){
+      inspectSplit([]);
+    }else if(days === 2){
+      for(var cut1=1; cut1<=stationCount; cut1++) inspectSplit([cut1]);
+    }else{
+      for(var first=1; first<=stationCount; first++){
+        for(var second=first; second<=stationCount; second++) inspectSplit([first, second]);
+      }
+    }
+
+    return best;
+  }
   el('buildBtn').addEventListener('click', function(){ 
 
     renderAuditorInputs(); 
@@ -1384,9 +1247,9 @@ function twoOpt(order, durMatrix){
 
   
 
-    var auditMin = parseFloat(el('auditMinInput').value) || 60; 
+    var auditMin = 120; // Stały czas audytu: 2 godziny. 
 
-    var dailyCapMin = (parseFloat(el('dailyCapInput').value) || 12) * 60; 
+    var dailyCapMin = 8 * 60; // Stały standardowy limit dnia. Reguły delegacji określa silnik. 
 
     var baseAddr = el('baseInput').value.trim(); 
 
@@ -1476,11 +1339,11 @@ function twoOpt(order, durMatrix){
 
   
 
-        for(var days=1; days<=5; days++){ 
+        for(var days=1; days<=3; days++){ 
 
           var planRoutes = []; 
 
-          var budgetMin = days * dailyCapMin; 
+          var budgetMin = days * BASE_DAY_MIN; 
 
   
 
@@ -1554,91 +1417,52 @@ function twoOpt(order, durMatrix){
 
   
 
-  function buildRouteForCluster(result, days, budgetMin, auditMin, dailyCapMin){ 
+  function buildRouteForCluster(result, days, budgetMin, auditMin, dailyCapMin){
+    var durMatrix = result.durMatrix;
+    var distMatrix = result.distMatrix;
+    var candidates = result.candidates;
+    if(!candidates || !candidates.length){ return null; }
 
-    var durMatrix = result.durMatrix; 
+    var plan = constructFeasibleRoute(
+      candidates, durMatrix, distMatrix, auditMin, days
+    );
+    if(!plan || !plan.schedule || plan.order.length < 2){ return null; }
 
-    var distMatrix = result.distMatrix; 
+    var orderedIdx = plan.order;
+    var schedule = plan.schedule;
+    var orderedStations = orderedIdx.slice(1).map(function(idx){
+      var candidate = stationByIdx(candidates, idx);
+      return candidate ? candidate.station : null;
+    }).filter(Boolean);
+    if(!orderedStations.length){ return null; }
 
-    var candidates = result.candidates; 
+    var legsMin = [];
+    var totalDist = 0;
+    for(var i=1; i<orderedIdx.length; i++){
+      legsMin.push(durMatrix[orderedIdx[i-1]][orderedIdx[i]] / 60);
+      totalDist += distMatrix[orderedIdx[i-1]][orderedIdx[i]] || 0;
+    }
+    totalDist += distMatrix[orderedIdx[orderedIdx.length-1]][0] || 0;
 
-    if(!candidates || candidates.length === 0){ return null; } 
-
-  
-
-    var res = greedyBuild(0, durMatrix, distMatrix, candidates, auditMin, budgetMin); 
-
-    var orderedIdx = twoOpt(res.order.slice(), durMatrix); 
-
-    var orderedStations = orderedIdx.map(function(i){ 
-
-      if(i === 0){ return null; } 
-
-      var found = candidates.find(function(c){ return c.idx === i; }); 
-
-      return found ? found.station : null; 
-
-    }).filter(Boolean); 
-
-  
-
-    if(orderedStations.length === 0){ return null; } 
-
-  
-
-    var legsMin = []; 
-
-    var totalDist = 0; 
-
-    var routeDriveMin = 0; 
-
-    for(var k=1; k<orderedIdx.length; k++){ 
-
-      var driveMin = durMatrix[orderedIdx[k-1]][orderedIdx[k]] / 60; 
-
-      legsMin.push(driveMin); 
-
-      routeDriveMin += driveMin; 
-
-      totalDist += distMatrix[orderedIdx[k-1]][orderedIdx[k]]; 
-
-    } 
-
-  
-
-    var totalMin = routeDriveMin + (orderedStations.length * auditMin); 
-
-    return { 
-
-      auditorId: result.auditorId, 
-
-      auditorName: result.auditorName, 
-
-      days: days, 
-
-      budgetMin: budgetMin, 
-
-      orderedIdx: orderedIdx, 
-
-      orderedStations: orderedStations, 
-
-      legsMin: legsMin, 
-
-      totalDist: totalDist, 
-
-      totalMin: totalMin, 
-
-      dayBreak: buildDayBreakdown(orderedStations, legsMin, auditMin, dailyCapMin), 
-
-      totalRisk: orderedStations.reduce(function(a,s){ return a + s.risk; }, 0), 
-
-      origin: result.origin 
-
-    }; 
-
-  } 
-
-  
+    return {
+      auditorId: result.auditorId,
+      auditorName: result.auditorName,
+      days: days,
+      budgetMin: days * BASE_DAY_MIN,
+      orderedIdx: orderedIdx,
+      orderedStations: orderedStations,
+      legsMin: legsMin,
+      totalDist: totalDist,
+      totalMin: schedule.totalMin,
+      dayTotals: schedule.dayTotals,
+      returnMin: schedule.returnMin,
+      dayBreak: schedule.breakdown,
+      totalRisk: orderedStations.reduce(function(sum, station){
+        return sum + (station.risk || 0);
+      }, 0),
+      origin: result.origin
+    };
+  }
 
   function renderTeamPlans(plans){ 
 
@@ -1760,11 +1584,15 @@ function twoOpt(order, durMatrix){
 
         name: 'Trasa ' + (state.routes.length + 1) + ' · ' + pr.auditorName, 
 
-        auditor: pr.auditorName, 
+        auditor: pr.auditorName,
+
+        days: pr.days, 
 
         order: pr.orderedStations.map(function(s){ return s.id; }), 
 
-        dayBreak: pr.dayBreak, 
+        dayBreak: pr.dayBreak,
+        dayTotals: pr.dayTotals,
+        returnMin: pr.returnMin, 
 
         legsMin: pr.legsMin, 
 
@@ -1812,11 +1640,8 @@ function twoOpt(order, durMatrix){
 
               if(roundtrip){ 
 
-                route.totalDist = data.routes[0].distance; 
-
-                var extra = data.routes[0].legs[data.routes[0].legs.length-1].duration / 60; 
-
-                route.totalMin = pr.totalMin + extra; 
+                route.totalDist = data.routes[0].distance;
+                route.totalMin = pr.totalMin; 
 
               } 
 
@@ -1942,7 +1767,7 @@ function twoOpt(order, durMatrix){
 
     stations.forEach(function(s,idx){ 
 
-      var dayNo = (route.dayBreak && route.dayBreak[idx]) || 1; 
+      var dayNo = Math.min((route.dayBreak && route.dayBreak[idx]) || 1, route.days || 3); 
 
       if(dayNo!==lastDay){ 
 
