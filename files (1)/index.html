@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<!--
+  OBCHÓD — planer tras audytowych stacji paliw
+
+  Aplikacja jednoplikowa, bez kroku budowania: wystarczy otworzyć index.html.
+  Zależności: Leaflet (mapa), SheetJS (odczyt Excela) — obie z CDN.
+
+  Struktura strony:
+    header  — marka, statystyki, wybór trasy, obsługa projektu
+    panel-left   — import pliku, parametry, lista stacji wg priorytetu
+    map-wrap     — mapa
+    panel-right  — propozycje planów albo manifest wybranej trasy
+-->
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OBCHÓD — Planer tras audytowych | Stacje Paliw</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="styles.css?v=2.0">
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ===================== NAGŁÓWEK ===================== -->
+  <header class="app-header">
+    <div class="brand-block">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" aria-hidden="true">
+          <path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/>
+          <circle cx="12" cy="10" r="2.5"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <p class="eyebrow">Audyt stacji</p>
+        <h1>PlannerTras</h1>
+      </div>
+    </div>
+
+    <div class="header-mid">
+      <span><b id="statTotal">0</b> stacji</span>
+      <span>|</span>
+      <span><b id="statFree">0</b> wolnych</span>
+      <span>|</span>
+      <span><b id="statRoutes">0</b> tras</span>
+    </div>
+
+    <div class="header-actions">
+      <select class="route-select" id="routeSelect" aria-label="Wybierz trasę"></select>
+
+      <button class="ghost-dark" id="deleteRouteBtn" title="Usuń wybraną trasę" aria-label="Usuń wybraną trasę">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>
+        </svg>
+      </button>
+
+      <button class="ghost-dark" id="saveProjectBtn" title="Zapisz projekt do pliku" aria-label="Zapisz projekt do pliku">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+      </button>
+
+      <button class="ghost-dark" id="loadProjectBtn" title="Wczytaj projekt z pliku" aria-label="Wczytaj projekt z pliku">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
+
+      <button class="ghost-dark" id="newProjectBtn" title="Nowy projekt" aria-label="Rozpocznij nowy projekt">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+          <polyline points="13 2 13 9 20 9"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- ===================== PANEL LEWY ===================== -->
+    <aside class="panel panel-left">
+
+      <!-- Import pliku z tabelą ryzyk -->
+      <div class="section">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 13h6m-3-3v6m7-11H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+          </svg>
+          Importuj stacje
+        </h2>
+
+        <label class="csv-label">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          <span>Wybierz plik (Excel/CSV)</span>
+          <input type="file" id="excelInput" accept=".xlsx,.xls,.csv,.tsv">
+        </label>
+
+        <div id="geocodeStatus" role="status" aria-live="polite"></div>
+
+        <!-- Mapowanie kolumn pliku na role; pokazywane po wczytaniu pliku -->
+        <div id="importMap">
+          <label class="header-row">
+            <input type="checkbox" id="hasHeaderChk" checked>
+            Pierwszy wiersz to nagłówek
+          </label>
+
+          <div class="radio-row">
+            <label><input type="radio" name="prioDir" value="desc" checked> Wyższe wartości = wyższy priorytet</label>
+            <label><input type="radio" name="prioDir" value="asc"> Niższe wartości = wyższy priorytet</label>
+          </div>
+
+          <div id="mapRows"></div>
+
+          <button class="primary full-width" id="confirmImportBtn">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+            Importuj
+          </button>
+        </div>
+      </div>
+
+      <!-- Parametry planowania -->
+      <div class="section">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/>
+          </svg>
+          Parametry trasy
+        </h2>
+
+        <div class="field-row">
+          <label class="field-label" for="auditorsInput">Ilość audytorów</label>
+          <input type="number" id="auditorsInput" value="1" min="1" max="20">
+        </div>
+
+        <div class="field-row" id="auditorsNamesWrap"></div>
+
+        <label class="checkbox-row">
+          <input type="checkbox" id="roundtripCheck">
+          Wlicz powrót do bazy
+        </label>
+
+        <p class="hint">Limity czasu są ustalone automatycznie zgodnie z zasadami delegacji.</p>
+
+        <button class="primary full-width" id="buildBtn">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Zbuduj trasy
+        </button>
+      </div>
+
+      <!-- Lista stacji uszeregowana wg wagi ryzyka -->
+      <div class="section">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 6h13M8 12h13M8 18h13"/>
+            <path d="M3 6h.01M3 12h.01M3 18h.01"/>
+          </svg>
+          Lista stacji wg priorytetu
+        </h2>
+
+        <ul class="stop-list" id="stopList"></ul>
+
+        <p class="empty-state" id="emptyState">
+          <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.6" aria-hidden="true">
+            <path d="M12 21s-7-6.1-7-11a7 7 0 0 1 14 0c0 4.9-7 11-7 11z"/>
+            <circle cx="12" cy="10" r="2.5"/>
+          </svg>
+          Zaimportuj plik z numerami stacji i rankingiem ryzyka.
+        </p>
+      </div>
+    </aside>
+
+    <!-- ===================== MAPA ===================== -->
+    <section class="map-wrap">
+      <div id="map"></div>
+    </section>
+
+    <!-- ===================== PANEL PRAWY ===================== -->
+    <!-- Widoczny jest zawsze dokładnie jeden z dwóch paneli poniżej. -->
+    <aside class="panel panel-right">
+
+      <!-- Propozycje planów: pokazywane po kliknięciu „Zbuduj trasy" -->
+      <div id="proposalsPanel" hidden>
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 11l3 3L22 4"/>
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+          </svg>
+          Propozycje tras
+        </h2>
+
+        <p class="hint hint-spaced">
+          Wybierz wariant dopasowany do dostępności zespołu. Każdy dobiera stacje
+          wg priorytetu i bliskości geograficznej — nie sztywnej kolejności.
+        </p>
+
+        <div id="proposalCards"></div>
+
+        <button class="export-btn" id="cancelBuildBtn">Anuluj</button>
+      </div>
+
+      <!-- Manifest wybranej trasy -->
+      <div id="manifestPanel">
+        <h2>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/>
+            <path d="M8 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2"/>
+            <path d="M9 12l2 2 4-4"/>
+          </svg>
+          Trasy
+        </h2>
+
+        <div id="manifestSummary">
+          <div class="sum-item">
+            <div class="sv" id="sumDist">—</div>
+            <div class="sl">Dystans</div>
+          </div>
+          <div class="sum-item">
+            <div class="sv" id="sumTime">—</div>
+            <div class="sl">Czas (jazda+audyt)</div>
+          </div>
+          <div class="sum-item">
+            <div class="sv" id="sumVisited">—</div>
+            <div class="sl">Skontrolowano</div>
+          </div>
+        </div>
+
+        <ol class="manifest-list" id="manifestList"></ol>
+
+        <p class="empty-state" id="manifestEmpty">
+          <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="1.6" aria-hidden="true">
+            <path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/>
+            <path d="M8 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2"/>
+          </svg>
+          Wybierz trasę z listy powyżej albo zbuduj nową.
+        </p>
+
+        <button class="export-btn" id="exportBtn" disabled>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 4v12M7 11l5 5 5-5"/>
+            <path d="M4 20h16"/>
+          </svg>
+          Eksportuj (CSV)
+        </button>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<!-- Ukryty wybór pliku, uruchamiany przyciskiem „Wczytaj projekt" -->
+<input type="file" id="loadProjectInput" accept=".json" hidden>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="stations-db.js?v=2.0"></script>
+<script src="route-engine.js?v=2.0"></script>
+<script src="script.js?v=2.0"></script>
+</body>
+</html>

@@ -1,0 +1,932 @@
+/**
+ * OBCHÓD — arkusz stylów
+ * ---------------------------------------------------------------------------
+ * Kolejność sekcji odpowiada budowie interfejsu, od ogółu do szczegółu:
+ *   1. ZMIENNE            — paleta, typografia, promienie
+ *   2. RESET I PODSTAWY   — elementy globalne
+ *   3. UKŁAD STRONY       — nagłówek, siatka trzech kolumn
+ *   4. FORMULARZE         — pola, przyciski, mapowanie kolumn importu
+ *   5. LISTA STACJI       — panel lewy
+ *   6. MAPA               — panel środkowy
+ *   7. PROPOZYCJE TRAS    — panel prawy, karty planów
+ *   8. MANIFEST           — panel prawy, lista przystanków
+ *   9. ZNACZNIKI MAPY     — pinezki Leaflet
+ */
+
+/* =========================================================================
+   1. ZMIENNE
+   ========================================================================= */
+
+:root {
+  /* Powierzchnie */
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #f5f5f6;
+  --surface-map: #eceef0;
+  --surface-visited: #f0f7f0;
+
+  /* Linie */
+  --border: #e2e2e4;
+  --border-strong: #c9c9cc;
+  --border-visited: #90d090;
+
+  /* Kolory marki */
+  --black: #101113;
+  --black-raised: #1c1d20;
+  --black-line: #333333;
+  --red: #d81324;
+  --red-dark: #a30e1c;
+  --red-tint: #fdecec;
+  --amber: #b5730a;
+
+  /* Tekst */
+  --text: #101113;
+  --text-muted: #5b5f66;
+  --text-dim: #9a9ea4;
+  --text-on-dark: #ffffff;
+  --text-on-dark-muted: #c7c8cb;
+
+  /* Stany wyłączone */
+  --disabled-bg: #3a3b3e;
+  --disabled-text: #8a8b8e;
+
+  --radius: 8px;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+/* =========================================================================
+   2. RESET I PODSTAWY
+   ========================================================================= */
+
+* { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+::selection {
+  background: var(--red-tint);
+  color: var(--red-dark);
+}
+
+button { font-family: var(--font-body); }
+
+svg.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -3px;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* =========================================================================
+   3. UKŁAD STRONY
+   ========================================================================= */
+
+header.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 14px 24px;
+  border-bottom: 2px solid var(--black);
+  background: var(--black);
+  flex-wrap: wrap;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.brand-mark svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--text-on-dark);
+  stroke-width: 1.9;
+}
+
+.brand-text .eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  color: var(--red);
+  margin: 0 0 2px;
+}
+
+.brand-text h1 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-on-dark);
+}
+
+.header-mid {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.header-mid b {
+  color: var(--text-on-dark);
+  font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+main.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr 380px;
+  overflow: hidden;
+}
+
+@media (max-width: 1150px) {
+  main.layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 46vh auto;
+    overflow: auto;
+  }
+}
+
+aside.panel {
+  background: var(--surface);
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.panel-left { border-right: 1px solid var(--border); }
+.panel-right { border-left: 1px solid var(--border); }
+
+.panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--black);
+  margin: 0 0 12px;
+}
+
+.panel h2 svg { stroke: var(--red); }
+
+.section {
+  margin-bottom: 22px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.hint-spaced { margin-bottom: 12px; }
+
+.hint {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+/* =========================================================================
+   4. FORMULARZE
+   ========================================================================= */
+
+label.field-label {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+input[type=text],
+input[type=number],
+select {
+  width: 100%;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+input:focus,
+select:focus {
+  outline: none;
+  border-color: var(--red);
+  background: var(--surface);
+}
+
+.field-row { margin-bottom: 10px; }
+
+.auditor-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.auditor-row .auditor-name-input { flex: 1.4; }
+.auditor-row .auditor-base-select { flex: 1; }
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.checkbox-row input { accent-color: var(--red); }
+
+/* --- Przyciski --- */
+
+button.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  background: var(--red);
+  color: var(--text-on-dark);
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+button.primary svg { stroke: var(--text-on-dark); }
+button.primary:hover { background: var(--red-dark); }
+
+button.primary:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+button.full-width {
+  width: 100%;
+  margin-top: 10px;
+}
+
+button.ghost-dark {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: transparent;
+  color: var(--text-on-dark-muted);
+  border: 1px solid var(--black-line);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+button.ghost-dark:hover {
+  border-color: var(--red);
+  color: var(--text-on-dark);
+}
+
+/* --- Lista rozwijana tras (na ciemnym nagłówku) --- */
+
+select.route-select {
+  background: var(--black-raised);
+  color: var(--text-on-dark);
+  border: 1px solid var(--black-line);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+select.route-select option {
+  background: var(--black-raised);
+  color: var(--text-on-dark);
+}
+
+select.route-select option:checked {
+  background: var(--red);
+  color: var(--text-on-dark);
+}
+
+/* --- Wybór pliku --- */
+
+.csv-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 11px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.csv-label:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.csv-label input { display: none; }
+
+#geocodeStatus {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  min-height: 14px;
+}
+
+#geocodeStatus.err { color: var(--red); }
+
+/* --- Mapowanie kolumn importu --- */
+
+#importMap {
+  display: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-top: 10px;
+}
+
+#importMap.show { display: block; }
+
+.header-row {
+  display: block;
+  margin-bottom: 8px;
+}
+
+.header-row input {
+  accent-color: var(--red);
+  margin-right: 6px;
+}
+
+.map-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 12px;
+}
+
+.map-row .colname {
+  flex: 1;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-row select {
+  flex: 1.3;
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.radio-row {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  margin: 8px 0;
+  color: var(--text-muted);
+}
+
+.radio-row label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.radio-row input { accent-color: var(--red); }
+
+/* =========================================================================
+   5. LISTA STACJI
+   ========================================================================= */
+
+ul.stop-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+ul.stop-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  font-size: 12.5px;
+}
+
+ul.stop-list li .rk {
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  font-size: 10.5px;
+  flex: none;
+  width: 20px;
+}
+
+ul.stop-list li .nm {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+ul.stop-list li .wt {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--amber);
+  flex: none;
+}
+
+li button.rm {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px;
+  flex: none;
+  display: flex;
+}
+
+li button.rm:hover { color: var(--red); }
+li button.rm.add:hover { color: var(--ok, #1a7f37); }
+
+.badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .04em;
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex: none;
+  text-transform: uppercase;
+}
+
+.badge.free {
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+}
+
+.badge.assigned {
+  color: var(--red);
+  border: 1px solid var(--red);
+  background: var(--red-tint);
+}
+
+.empty-state {
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 12px 0;
+}
+
+.empty-state svg {
+  stroke: var(--border-strong);
+  width: 24px;
+  height: 24px;
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* =========================================================================
+   6. MAPA
+   ========================================================================= */
+
+.map-wrap {
+  position: relative;
+  background: var(--surface-map);
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+}
+
+.leaflet-container {
+  background: var(--surface-map);
+  font-family: var(--font-body);
+}
+
+/* =========================================================================
+   7. PROPOZYCJE TRAS
+   ========================================================================= */
+
+.proposal-card {
+  background: var(--surface-raised);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+/* Wariant o najwyższej sumie wag ryzyka */
+.proposal-card.best { border-color: var(--red); }
+
+.proposal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.proposal-head h3 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  margin: 0;
+}
+
+.proposal-head span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.proposal-stats {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.pstat {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.pstat b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--black);
+}
+
+.day-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 7px;
+  margin: 2px 4px 0 0;
+  color: var(--text-muted);
+}
+
+button.use-proposal {
+  width: 100%;
+  margin-top: 10px;
+  background: var(--black);
+  color: var(--text-on-dark);
+  border: none;
+  border-radius: var(--radius);
+  padding: 9px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+button.use-proposal:hover { background: var(--red); }
+
+/* =========================================================================
+   8. MANIFEST
+   ========================================================================= */
+
+#manifestSummary {
+  display: none;
+  background: var(--black);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+#manifestSummary.show {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sum-item { text-align: left; }
+
+.sum-item .sv {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  color: var(--text-on-dark);
+}
+
+.sum-item .sl {
+  font-size: 9.5px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  margin-top: 2px;
+}
+
+.manifest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.day-header:first-child { margin-top: 0; }
+
+.day-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.ticket {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  margin-bottom: 4px;
+  transition: background .15s;
+}
+
+.ticket.visited {
+  background: var(--surface-visited);
+  border-color: var(--border-visited);
+}
+
+.ticket-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ticket-num {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.ticket-name {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.ticket-leg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+
+.ticket-leg svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.stamp-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  padding: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: .1s;
+}
+
+.stamp-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.stamp-btn.on {
+  background: var(--red);
+  border-color: var(--red);
+  color: var(--text-on-dark);
+}
+
+.export-btn {
+  width: 100%;
+  background: var(--black);
+  color: var(--text-on-dark);
+  border: none;
+  border-radius: var(--radius);
+  padding: 9px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.export-btn:hover { background: var(--red); }
+
+.export-btn:disabled {
+  background: var(--disabled-bg);
+  color: var(--disabled-text);
+  cursor: not-allowed;
+}
+
+/* --- Ręczna edycja trasy --- */
+
+.ticket-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.stop-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.stop-edit-btn {
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  border-radius: 4px;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stop-edit-btn svg {
+  width: 100%;
+  height: 100%;
+}
+
+.stop-edit-btn:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.day-load {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.day-load.over {
+  color: var(--red);
+  font-weight: 600;
+}
+
+/* Nagłówek dnia ma kreskę wypełniającą, więc obciążenie idzie przed nią. */
+.day-header .day-load { order: 2; }
+.day-header::after { order: 3; }
+
+.route-warning {
+  background: var(--red-tint);
+  border-left: 3px solid var(--red);
+  color: var(--red-dark);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+/* =========================================================================
+   9. ZNACZNIKI MAPY
+   ========================================================================= */
+
+.marker-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--red);
+  color: var(--text-on-dark);
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .2);
+}
+
+/* Ostrze pinezki */
+.marker-pin::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid var(--red);
+  transform: translateX(-50%);
+}
+
+.marker-pin.base { background: var(--black-line); }
+.marker-pin.base::after { border-top-color: var(--black-line); }
+
+.marker-pin.start { background: var(--amber); }
+.marker-pin.start::after { border-top-color: var(--amber); }
