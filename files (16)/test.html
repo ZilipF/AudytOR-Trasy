@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<!--
+  OBCHÓD — strona kontrolna
+
+  DO CZEGO SŁUŻY
+  Sprawdza, czy logika aplikacji działa poprawnie. Uruchom ją ZAWSZE po każdej
+  zmianie w route-engine.js, script.js albo stations-db.js — zanim pokażesz
+  aplikację komukolwiek.
+
+  JAK URUCHOMIĆ
+  Kliknij dwukrotnie ten plik. Otworzy się w przeglądarce i sam przeprowadzi
+  testy. Nie trzeba nic instalować.
+
+  JAK CZYTAĆ WYNIK
+  Zielony pasek u góry = wszystko działa.
+  Czerwony pasek = coś się zepsuło; rozwiń czerwoną pozycję, żeby zobaczyć,
+  czego oczekiwano, a co wyszło.
+
+  UWAGA: ta strona nie uruchamia interfejsu aplikacji — testuje wyłącznie
+  logikę. Wygląd i mapę sprawdzasz, otwierając index.html.
+-->
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OBCHÓD — strona kontrolna</title>
+<style>
+  :root {
+    --ok: #1a7f37; --ok-bg: #eaf6ec;
+    --bad: #d81324; --bad-bg: #fdecec;
+    --ink: #101113; --muted: #5b5f66; --line: #e2e2e4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px; background: #fff; color: var(--ink);
+    font-family: 'Segoe UI', system-ui, sans-serif; line-height: 1.5;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 21px; margin: 0 0 4px; }
+  .lead { color: var(--muted); font-size: 13.5px; margin: 0 0 22px; }
+  #banner {
+    padding: 16px 20px; border-radius: 8px; font-size: 16px; font-weight: 600;
+    margin-bottom: 8px; border: 2px solid transparent;
+  }
+  #banner.pass { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+  #banner.fail { background: var(--bad-bg); color: var(--bad); border-color: var(--bad); }
+  #hint { font-size: 13px; color: var(--muted); margin: 0 0 24px; }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 26px 0 8px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  .case { padding: 7px 10px; border-radius: 6px; font-size: 13.5px; margin-bottom: 3px; }
+  .case.ok { color: var(--ok); }
+  .case.bad { background: var(--bad-bg); color: var(--bad); font-weight: 600; }
+  .case .mark { display: inline-block; width: 22px; font-weight: 700; }
+  .detail {
+    margin: 6px 0 0 22px; padding: 8px 10px; background: #fff;
+    border-left: 3px solid var(--bad); font-family: Consolas, monospace;
+    font-size: 12px; color: var(--ink); font-weight: 400; white-space: pre-wrap;
+  }
+  footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--line);
+           font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>OBCHÓD — strona kontrolna</h1>
+  <p class="lead">
+    Sprawdza logikę aplikacji. Uruchamiaj po każdej zmianie w plikach
+    <code>route-engine.js</code>, <code>script.js</code> lub <code>stations-db.js</code>.
+  </p>
+
+  <div id="banner">Trwa sprawdzanie…</div>
+  <p id="hint"></p>
+  <div id="results"></div>
+
+  <footer>
+    Ta strona testuje wyłącznie logikę obliczeniową — nie uruchamia interfejsu.
+    Wygląd, mapę i import pliku sprawdzasz, otwierając <code>index.html</code>.
+  </footer>
+</div>
+
+<!-- Te same pliki, których używa aplikacja. script.js nie uruchomi tu
+     interfejsu, bo na stronie nie ma elementu #app — udostępni tylko
+     funkcje przez window.ObchodInternals. -->
+<script src="stations-db.js?v=4.9"></script>
+<script src="route-engine.js?v=4.9"></script>
+<script src="script.js?v=4.9"></script>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- Minimalny silnik testów ---------- */
+
+  var passed = 0, failed = 0;
+  var results = document.getElementById('results');
+
+  function section(title){
+    var h = document.createElement('h2');
+    h.textContent = title;
+    results.appendChild(h);
+  }
+
+  function check(label, condition, detail){
+    var ok = !!condition;
+    ok ? passed++ : failed++;
+
+    var row = document.createElement('div');
+    row.className = 'case ' + (ok ? 'ok' : 'bad');
+    row.innerHTML = '<span class="mark">' + (ok ? '✓' : '✗') + '</span>';
+    row.appendChild(document.createTextNode(label));
+
+    if(!ok && detail){
+      var d = document.createElement('div');
+      d.className = 'detail';
+      d.textContent = detail;
+      row.appendChild(d);
+    }
+    results.appendChild(row);
+  }
+
+  /** Porównanie z czytelnym komunikatem o różnicy. */
+  function equals(label, actual, expected){
+    check(label, actual === expected,
+      'oczekiwano: ' + JSON.stringify(expected) + '\notrzymano:  ' + JSON.stringify(actual));
+  }
+
+  /* ---------- Dane pomocnicze ---------- */
+
+  // Generator liczb pseudolosowych o stałym ziarnie — testy mają dawać
+  // ten sam wynik przy każdym uruchomieniu.
+  var seed = 12345;
+  function rnd(){
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  }
+
+  function makeStations(n, baseLat, baseLng, spread){
+    var out = [];
+    for(var i = 0; i < n; i++){
+      out.push({
+        id: 's' + i, name: 'Stacja ' + i,
+        lat: baseLat + (rnd() - 0.5) * 2 * spread,
+        lng: baseLng + (rnd() - 0.5) * 2 * spread,
+        risk: Math.round(rnd() * 100)
+      });
+    }
+    return out;
+  }
+
+  // Zastępcza macierz odległości: odległość w linii prostej + 30% na drogi,
+  // przy założeniu średniej 70 km/h. Nie potrzebujemy tu OSRM.
+  function makeMatrices(points){
+    var n = points.length, dur = [], dist = [];
+    for(var i = 0; i < n; i++){
+      dur.push([]); dist.push([]);
+      for(var j = 0; j < n; j++){
+        var km = RouteEngine.geoKm(points[i], points[j]) * 1.3;
+        dist[i].push(km * 1000);
+        dur[i].push(km / 70 * 3600);
+      }
+    }
+    return { dur: dur, dist: dist };
+  }
+
+  /* =======================================================================
+     1. BAZA STACJI
+     ======================================================================= */
+
+  section('1. Baza stacji (stations-db.js)');
+
+  var db = window.STATIONS_DB;
+  check('plik bazy został wczytany', Array.isArray(db),
+    'window.STATIONS_DB nie jest tablicą — sprawdź, czy plik stations-db.js istnieje ' +
+    'i czy nie ma w nim błędu składni.');
+
+  if(Array.isArray(db)){
+    check('baza nie jest pusta', db.length > 0, 'liczba stacji: ' + db.length);
+
+    var badCoords = db.filter(function(s){
+      return !(typeof s.lat === 'number' && typeof s.lng === 'number') ||
+        isNaN(s.lat) || isNaN(s.lng);
+    });
+    check('wszystkie stacje mają poprawne współrzędne', badCoords.length === 0,
+      'stacje bez współrzędnych: ' + badCoords.slice(0, 5).map(function(s){ return s.id; }).join(', '));
+
+    // Stacje poza granicami Polski zwykle oznaczają błąd w źródłowym Excelu.
+    var outside = db.filter(function(s){
+      return s.lat < 48.5 || s.lat > 55.5 || s.lng < 13.5 || s.lng > 24.5;
+    });
+    check('wszystkie stacje leżą w granicach Polski', outside.length === 0,
+      'poza granicami: ' + outside.slice(0, 5).map(function(s){
+        return s.id + ' (' + s.lat + ', ' + s.lng + ')';
+      }).join(', '));
+
+    var seenIds = {}, dupIds = [];
+    db.forEach(function(s){
+      if(seenIds[s.id]){ dupIds.push(s.id); }
+      seenIds[s.id] = true;
+    });
+    check('identyfikatory stacji są unikalne', dupIds.length === 0,
+      'powtórzone id: ' + dupIds.slice(0, 5).join(', '));
+
+    var noNumber = db.filter(function(s){ return !String(s.stationNo || '').trim(); });
+    check('każda stacja ma numer', noNumber.length === 0,
+      'bez numeru: ' + noNumber.length + ' stacji');
+
+    var loaded = window.ObchodInternals.createStationsFromDb();
+    equals('wszystkie stacje przechodzą walidację', loaded.length, db.length);
+
+    // Regresja: pole "city" musi realnie trafiać do obiektu stacji w
+    // aplikacji, nie tylko istnieć w surowym pliku bazy — createStationsFromDb
+    // kiedyś jawnie wymieniała pola do skopiowania i city łatwo tam pominąć.
+    var withCity = loaded.filter(function(s){ return !!s.city; });
+    check('stacje niosą pole city do aplikacji (nie tylko w surowym pliku)',
+      withCity.length > 0, 'stacji z miastem po wczytaniu: ' + withCity.length);
+  }
+
+  /* =======================================================================
+     2. SYNCHRONIZACJA Z BAZĄ
+     ======================================================================= */
+
+  section('2. Synchronizacja zapisanego stanu z bazą');
+
+  var API = window.ObchodInternals;
+  check('funkcje testowe są dostępne', !!API,
+    'window.ObchodInternals nie istnieje — sprawdź, czy script.js wczytał się bez błędu.');
+
+  if(API && Array.isArray(db) && db.length >= 5){
+    var base = API.createStationsFromDb();
+
+    // Zapisany stan: część stacji z wagami i przypisaniem do trasy
+    var saved = base.slice(0, 5).map(function(s, i){
+      return Object.assign({}, s, {
+        risk: 100 - i * 10,
+        status: i < 2 ? 'assigned' : 'free',
+        routeId: i < 2 ? 'r1' : null,
+        visited: i === 0
+      });
+    });
+    // Stacja, której już nie ma w bazie, ale niesie pracę użytkownika
+    saved.push({ id: 'PL_NIEISTNIEJE', stationNo: '999999', name: 'Zlikwidowana',
+      lat: 52, lng: 21, risk: 50, status: 'assigned', routeId: 'r1', visited: false });
+    // Stacja dodana ręcznie (brak numeru = spoza bazy)
+    saved.push({ id: 'st1', stationNo: '', name: 'Punkt własny',
+      lat: 52.2, lng: 21.0, risk: 30, status: 'free', routeId: null, visited: false });
+
+    var merged = API.mergeStationsWithDb(saved);
+    var byId = {};
+    merged.stations.forEach(function(s){ byId[s.id] = s; });
+
+    equals('wagi ryzyka zachowane', byId[base[0].id].risk, 100);
+    equals('przypisanie do trasy zachowane', byId[base[1].id].routeId, 'r1');
+    equals('status skontrolowania zachowany', byId[base[0].id].visited, true);
+    check('stacja spoza bazy z pracą użytkownika zachowana', !!byId['PL_NIEISTNIEJE'],
+      'zniknęła — trasa straciłaby przystanek');
+    check('stacja dodana ręcznie zachowana', !!byId['st1']);
+    equals('nowe stacje z bazy dodane', merged.stats.added, db.length - 5);
+    check('brak duplikatów po scaleniu',
+      Object.keys(byId).length === merged.stations.length);
+
+    var same = API.mergeStationsWithDb(base);
+    equals('zgodny stan nie zgłasza fałszywych zmian', API.describeMergeStats(same.stats), '');
+
+    var empty = API.mergeStationsWithDb(null);
+    equals('brak zapisu → pełna baza', empty.stations.length, db.length);
+  }
+
+  /* =======================================================================
+     3. FUNKCJE POMOCNICZE
+     ======================================================================= */
+
+  section('3. Formatowanie i odczyt danych z pliku');
+
+  if(API){
+    equals('numer stacji: spacje usunięte', API.normalizeStationNo('  123 '), '123');
+    equals('numer stacji: końcówka .0 z Excela', API.normalizeStationNo('4567.0'), '4567');
+    equals('numer stacji: wyłuskany z tekstu', API.extractStationNo('Stacja nr 812'), '812');
+    equals('numer stacji: pusta wartość', API.normalizeStationNo(null), '');
+
+    equals('liczba z przecinkiem dziesiętnym', API.parseNumber('12,5'), 12.5);
+    equals('liczba z kropką', API.parseNumber('12.5'), 12.5);
+
+    equals('dystans w km', API.fmtDist(240000), '240,0 km');
+    equals('dystans nieznany', API.fmtDist(null), '—');
+    equals('czas poniżej godziny', API.fmtMin(45), '45 min');
+    equals('czas pełnych godzin', API.fmtMin(120), '2 godz ');
+    equals('czas godziny z minutami', API.fmtMin(700), '11 godz 40 min');
+
+    equals('rozpoznanie kolumny z numerem', API.guessRole('Nr stacji'), 'stationNo');
+    equals('rozpoznanie kolumny z ryzykiem', API.guessRole('Ranking ryzyka'), 'risk');
+    equals('rozpoznanie kolumny z miastem', API.guessRole('Miasto'), 'city');
+    equals('kolumna nierozpoznana', API.guessRole('Uwagi wewnętrzne'), 'skip');
+
+    equals('zapytanie adresowe z miastem',
+      API.buildGeocodeQuery('Gdańsk', 'woj. pomorskie', 'ul. Długa 1'),
+      'ul. Długa 1, Gdańsk, pomorskie, Polska');
+
+    equals('CSV: cudzysłów zabezpieczony',
+      API.toCsv([['a"b']]), '"a""b"');
+    equals('CSV: przecinek nie rozbija kolumny',
+      API.toCsv([['Warszawa, Mokotów', 5]]), '"Warszawa, Mokotów","5"');
+
+    equals('współrzędne dla OSRM w kolejności lng,lat',
+      API.toOsrmCoords([{ lat: 52.1, lng: 21.2 }]), '21.2,52.1');
+
+    // Odmiana liczebnika w opisach tras (1 trasa, 2-4 trasy, 5+ tras, wyjątek 12-14)
+    equals('odmiana: 1 → forma pojedyncza', API.pluralPL(1, ['stacja', 'stacje', 'stacji']), 'stacja');
+    equals('odmiana: 2 → forma 2-4', API.pluralPL(2, ['stacja', 'stacje', 'stacji']), 'stacje');
+    equals('odmiana: 4 → forma 2-4', API.pluralPL(4, ['stacja', 'stacje', 'stacji']), 'stacje');
+    equals('odmiana: 5 → forma pozostała', API.pluralPL(5, ['stacja', 'stacje', 'stacji']), 'stacji');
+    equals('odmiana: 12 → wyjątek (nie 2-4)', API.pluralPL(12, ['stacja', 'stacje', 'stacji']), 'stacji');
+    equals('odmiana: 22 → forma 2-4', API.pluralPL(22, ['stacja', 'stacje', 'stacji']), 'stacje');
+    equals('odmiana: 0 → forma pozostała', API.pluralPL(0, ['stacja', 'stacje', 'stacji']), 'stacji');
+    equals('fmtCount składa liczbę i odmianę', API.fmtCount(3, ['trasa', 'trasy', 'tras']), '3 trasy');
+
+    // Kolor grupy na mapie/liście (CODO/DOFO) — patrz .marker-pin.dofo w styles.css
+    equals('grupa DOFO rozpoznana', API.stationGroupClass({ group: 'PL_DOFO' }), 'dofo');
+    equals('grupa CODO rozpoznana', API.stationGroupClass({ group: 'PL_CODO' }), 'codo');
+    equals('grupa nierozpoznana → domyślnie codo', API.stationGroupClass({ group: 'COS_INNEGO' }), 'codo');
+  }
+
+  /* =======================================================================
+     4. HARMONOGRAM DELEGACJI
+     ======================================================================= */
+
+  section('4. Reguły czasu pracy');
+
+  var pts = [{ lat: 52.2, lng: 21.0 }].concat(makeStations(4, 52.4, 21.4, 0.4));
+  var m = makeMatrices(pts);
+  var order = [0, 1, 2, 3, 4];
+
+  var sched1 = RouteEngine.evaluateSchedule(order, m.dur, 120, 1);
+  check('4 stacje po 2 h nie mieszczą się w jednym dniu', sched1 === null,
+    'silnik uznał to za wykonalne, a nie powinien: ' + JSON.stringify(sched1));
+
+  var sched3 = RouteEngine.evaluateSchedule(order, m.dur, 120, 3);
+  check('te same stacje mieszczą się w trzech dniach', sched3 !== null);
+
+  if(sched3){
+    check('żaden dzień nie przekracza limitu ' + (RouteEngine.MAX_DAY_MIN / 60) + ' h',
+      sched3.dayTotals.every(function(t){ return t <= RouteEngine.MAX_DAY_MIN; }),
+      'czasy dni: ' + sched3.dayTotals.map(function(t){ return Math.round(t) + ' min'; }).join(', '));
+
+    check('łączny czas mieści się w budżecie delegacji',
+      sched3.totalMin <= 3 * RouteEngine.BASE_DAY_MIN,
+      'łącznie ' + Math.round(sched3.totalMin) + ' min, budżet ' + (3 * RouteEngine.BASE_DAY_MIN));
+
+    equals('każda stacja ma przypisany dzień', sched3.breakdown.length, order.length - 1);
+
+    check('dni przypisane rosnąco', sched3.breakdown.every(function(d, i){
+      return i === 0 || d >= sched3.breakdown[i - 1];
+    }), 'przypisanie dni: ' + sched3.breakdown.join(', '));
+
+    check('powrót do bazy doliczony tylko do ostatniego dnia', sched3.returnMin > 0,
+      'returnMin = ' + sched3.returnMin);
+  }
+
+  // Regresja: silnik potrafił upychać wszystkie stacje w pierwsze 1-2 dni
+  // wariantu wielodniowego, zostawiając resztę dni pustymi (kara za stacje
+  // na ostatnim dniu premiowała właśnie to). Scenariusz niżej ma wystarczająco
+  // stacji i budżetu czasu, żeby 3-dniowy wariant realnie mógł (i powinien)
+  // wykorzystać wszystkie 3 dni — jeśli engine znowu zacznie je ściskać,
+  // ten test to wyłapie.
+  var balancePts = [{ lat: 52.2, lng: 21.0 }].concat(makeStations(6, 52.5, 21.5, 0.5));
+  var balanceM = makeMatrices(balancePts);
+  var balanceOrder = [0, 1, 2, 3, 4, 5, 6];
+  var balanceSched = RouteEngine.evaluateSchedule(balanceOrder, balanceM.dur, 60, 3);
+
+  check('6 stacji przy 60-minutowym audycie mieści się w 3 dniach (dane testowe OK)',
+    balanceSched !== null, 'silnik uznał to za niewykonalne — dostosuj dane testowe');
+
+  if(balanceSched){
+    var usedDays = {};
+    balanceSched.breakdown.forEach(function(d){ usedDays[d] = true; });
+    check('3-dniowy wariant z wystarczającą liczbą stacji wykorzystuje WSZYSTKIE 3 dni (nie ściska do mniej)',
+      Object.keys(usedDays).length === 3,
+      'przypisanie dni: ' + balanceSched.breakdown.join(', ') +
+      ' (wykorzystano tylko ' + Object.keys(usedDays).length + ' z 3 dni)');
+  }
+
+  /* =======================================================================
+     5. BUDOWA TRAS
+     ======================================================================= */
+
+  section('5. Budowa tras');
+
+  function buildFor(stations, origin, days){
+    var points = [origin].concat(stations);
+    var mm = makeMatrices(points);
+    return RouteEngine.buildRouteForCluster({
+      auditorName: 'Test', origin: origin,
+      durMatrix: mm.dur, distMatrix: mm.dist,
+      candidates: stations.map(function(s, i){ return { station: s, idx: i + 1 }; })
+    }, days, 120);
+  }
+
+  var origin = { lat: 52.2297, lng: 21.0122, isStation: false };
+  var far = makeStations(25, 52.6, 22.4, 1.6);
+  var route = buildFor(far, origin, 3);
+
+  check('silnik zbudował trasę', !!route,
+    'zwrócono null — sprawdź, czy stacje nie leżą zbyt daleko od bazy');
+
+  if(route){
+    check('trasa zawiera co najmniej jedną stację', route.orderedStations.length > 0);
+    equals('liczba odcinków zgodna z liczbą stacji',
+      route.legsMin.length, route.orderedStations.length);
+    equals('przypisanie dni zgodne z liczbą stacji',
+      route.dayBreak.length, route.orderedStations.length);
+    check('dystans dodatni', route.totalDist > 0);
+    check('suma wag zgadza się z sumą stacji',
+      route.totalRisk === route.orderedStations.reduce(function(a, s){ return a + s.risk; }, 0));
+
+    var ids = route.orderedStations.map(function(s){ return s.id; });
+    check('żadna stacja nie powtarza się w trasie',
+      new Set(ids).size === ids.length, 'kolejność: ' + ids.join(', '));
+
+    // Ta sama trasa dla tych samych danych — brak losowości w silniku
+    var again = buildFor(far, origin, 3);
+    equals('wynik jest powtarzalny',
+      again.orderedStations.map(function(s){ return s.id; }).join(','), ids.join(','));
+  }
+
+  // Reguła 100 km: bliskie stacje odpadają z delegacji wielodniowych
+  var near = makeStations(10, 52.25, 21.05, 0.15);
+  var nearMulti = buildFor(near, origin, 2);
+  check('stacje bliżej niż ' + RouteEngine.MULTIDAY_MIN_KM_FROM_BASE +
+    ' km nie trafiają do delegacji 2-dniowej', nearMulti === null,
+    'silnik zaplanował delegację dla stacji tuż przy bazie');
+
+  var nearSingle = buildFor(near, origin, 1);
+  check('te same stacje da się zaplanować na jeden dzień', nearSingle !== null);
+
+  // Regresja: ręcznie wybrana stacja (patrz "Uzupełnij trasę" w aplikacji)
+  // zwykle ma wagę 0 — właśnie dlatego trzeba ją wybrać ręcznie, inaczej
+  // trafiłaby do automatu sama. Zwykły dobór po wadze (priority = risk)
+  // nigdy by jej nie wybrał wśród silnej konkurencji — flaga "mandatory"
+  // ma to wymusić niezależnie od wagi.
+  var mandatoryPick = { lat: 52.26, lng: 21.10, risk: 0, id: 'mandatory-test', name: 'Ręcznie wybrana' };
+  var strongCompetitors = makeStations(15, 52.24, 21.02, 0.05).map(function(s){
+    s.risk = 900;
+    return s;
+  });
+  var withMandatory = [mandatoryPick].concat(strongCompetitors);
+  var mmMandatory = makeMatrices([origin].concat(withMandatory));
+  var candidatesMandatory = withMandatory.map(function(s, i){
+    return { station: s, idx: i + 1, mandatory: i === 0 };
+  });
+  var routeMandatory = RouteEngine.constructFeasibleRoute(
+    candidatesMandatory, mmMandatory.dur, mmMandatory.dist, 60, 1
+  );
+  check('trasa powstała mimo silnej konkurencji o wadze 900 vs 0', !!routeMandatory);
+  if(routeMandatory){
+    check('stacja oznaczona jako "mandatory" (waga 0) jest w trasie mimo silnej konkurencji',
+      routeMandatory.order.indexOf(1) !== -1,
+      'kolejność trasy: ' + routeMandatory.order.join(', ') + ' — brakuje idx=1 (obowiązkowej)');
+  }
+
+  // I odwrotnie: bez flagi mandatory ta sama stacja o wadze 0 powinna
+  // odpaść — potwierdza, że test wyżej sprawdza faktyczne działanie flagi,
+  // nie przypadkowe dopasowanie.
+  var candidatesNoFlag = withMandatory.map(function(s, i){ return { station: s, idx: i + 1 }; });
+  var routeNoFlag = RouteEngine.constructFeasibleRoute(
+    candidatesNoFlag, mmMandatory.dur, mmMandatory.dist, 60, 1
+  );
+  check('bez flagi "mandatory" stacja o wadze 0 faktycznie odpada (kontrola testu wyżej)',
+    !routeNoFlag || routeNoFlag.order.indexOf(1) === -1,
+    'jeśli to się nie powiedzie, powyższy test niczego nie potwierdza');
+
+  // Regresja: pojedyncza, bardzo odległa stacja (sam dojazd + powrót nie
+  // mieści się w jednym dniu) MUSI dostać dodatkowy dzień — to nie to samo,
+  // co "za mało stacji na zażądaną liczbę dni" (poprzedni test wyżej w tym
+  // pliku, sekcja 5). Mylenie tych dwóch przypadków było realnym błędem:
+  // naprawa jednego psuła drugi. Odległość dobrana tak, żeby dojazd + audyt
+  // + powrót w jeden dzień przekraczał MAX_DAY_MIN, ale 2 dni już starczały.
+  var farSingle = { lat: 50.91, lng: 15.80, risk: 0, id: 'far-single', name: 'Bardzo daleko' };
+  var mmFar = makeMatrices([origin, farSingle]);
+  // Wymuśmy realistyczny, długi czas przejazdu (jak prawdziwe km w kraju),
+  // bo losowe współrzędne testowe bywają zbyt blisko, żeby to sprawdzić.
+  mmFar.dur[0][1] = mmFar.dur[1][0] = 5.25 * 3600; // 5h15min, jak Warszawa-Jelenia Góra
+  var candidatesFar = [{ station: farSingle, idx: 1, mandatory: true }];
+
+  var farDay1 = RouteEngine.constructFeasibleRoute(candidatesFar, mmFar.dur, mmFar.dist, 120, 1);
+  check('bardzo odległa pojedyncza stacja: 1 dzień to faktycznie za mało (kontrola)',
+    !farDay1, 'jeśli to przejdzie, dane testowe nie sprawdzają tego, co powinny');
+
+  var farDay2 = RouteEngine.constructFeasibleRoute(candidatesFar, mmFar.dur, mmFar.dist, 120, 2);
+  check('ta sama stacja przy zażądanych 2 dniach DOSTAJE dodatkowy dzień (nie zostaje niewykonalna)',
+    !!farDay2, 'silnik zwrócił null zamiast rozłożyć dojazd i powrót na 2 dni');
+  if(farDay2){
+    check('faktycznie wykorzystane dokładnie 2 dni (nie 1, nie więcej)',
+      farDay2.schedule.dayTotals.length === 2,
+      'dayTotals.length = ' + farDay2.schedule.dayTotals.length);
+  }
+
+  var farDay3 = RouteEngine.constructFeasibleRoute(candidatesFar, mmFar.dur, mmFar.dist, 120, 3);
+  check('przy zażądanych 3 dniach ta sama stacja nadal używa tylko 2 (bez zbędnego trzeciego)',
+    !!farDay3 && farDay3.schedule.dayTotals.length === 2,
+    farDay3 ? ('dayTotals.length = ' + farDay3.schedule.dayTotals.length) : 'silnik zwrócił null');
+
+  /* =======================================================================
+     6. PODZIAŁ MIĘDZY KONTROLERÓW
+     ======================================================================= */
+
+  section('6. Podział stacji między kontrolerów');
+
+  var pool = makeStations(60, 52.0, 19.5, 3);
+  var clusters = RouteEngine.clusterStations(pool, 4);
+
+  equals('powstały cztery grupy', clusters.length, 4);
+  equals('żadna stacja nie zginęła',
+    clusters.reduce(function(a, c){ return a + c.length; }, 0), 60);
+
+  var flat = [];
+  clusters.forEach(function(c){ c.forEach(function(s){ flat.push(s.id); }); });
+  check('żadna stacja nie trafiła do dwóch grup', new Set(flat).size === 60);
+  check('każda grupa ma stacje', clusters.every(function(c){ return c.length > 0; }));
+
+  var sizes = clusters.map(function(c){ return c.length; });
+  check('grupy są w miarę równe (największa nie jest 3× większa od najmniejszej)',
+    Math.max.apply(null, sizes) <= Math.min.apply(null, sizes) * 3,
+    'rozmiary grup: ' + sizes.join(', '));
+
+  var few = RouteEngine.clusterStations(makeStations(2, 52, 21, 1), 5);
+  equals('mniej stacji niż kontrolerów — każdy dostaje jedną', few.length, 2);
+
+
+  /* =======================================================================
+     7. PRZELICZANIE DNI PO RĘCZNEJ EDYCJI
+     ======================================================================= */
+
+  section('7. Przeliczanie dni po ręcznej edycji');
+
+  // 3 stacje po 2 h kontroli + 30 min dojazdu każda, wszystkie w dniu 1
+  var oneDay = RouteEngine.summarizeDays([30, 30, 30], 120, [1, 1, 1], 1, 40);
+  equals('czas dnia: 3×(30+120) + 40 powrotu + 60 przerwy', Math.round(oneDay.totalMin), 550);
+  check('dzień mieści się w limicie', oneDay.overLimitDays.length === 0);
+  check('ale przekracza budżet 8 h', oneDay.overBudget === true,
+    'totalMin = ' + Math.round(oneDay.totalMin) + ', budżet = ' + RouteEngine.BASE_DAY_MIN);
+
+  // Ten sam zestaw rozłożony na dwa dni
+  var twoDays = RouteEngine.summarizeDays([30, 30, 30], 120, [1, 1, 2], 2, 40);
+  equals('dwa dni w podsumowaniu', twoDays.dayTotals.length, 2);
+  check('podział na dwa dni mieści się w budżecie', twoDays.overBudget === false,
+    'totalMin = ' + Math.round(twoDays.totalMin));
+
+  // Przeładowany dzień musi zostać wychwycony
+  var over = RouteEngine.summarizeDays([60, 60, 60, 60, 60], 120, [1, 1, 1, 1, 1], 1, 60);
+  check('przekroczenie 11 h zgłoszone', over.overLimitDays.length === 1,
+    'dni ponad normę: ' + JSON.stringify(over.overLimitDays));
+  equals('wskazano dzień 1', over.overLimitDays[0], 1);
+
+  var empty = RouteEngine.summarizeDays([], 120, [], 2, 0);
+  equals('pusta trasa: zero minut', empty.totalMin, 0);
+  check('pusta trasa nie zgłasza przekroczeń', empty.overLimitDays.length === 0);
+
+  /* =======================================================================
+     8. PRZYDZIAŁ STACJI DO BAZ
+     ======================================================================= */
+
+  section('8. Przydział stacji do baz kontrolerów');
+
+  if(API && API.assignStationsToAuditors && API.CONFIG){
+    var bases = API.CONFIG.BASES;
+    check('skonfigurowano co najmniej dwie bazy', bases.length >= 2,
+      'bazy: ' + bases.map(function(b){ return b.name; }).join(', '));
+
+    var waw = bases[0], gda = bases[1];
+
+    // Stacje wyraźnie przy każdej z baz
+    var nearWaw = makeStations(8, waw.lat, waw.lng, 0.3);
+    var nearGda = makeStations(8, gda.lat, gda.lng, 0.3);
+    var mixed = nearWaw.concat(nearGda);
+
+    var assigned = API.assignStationsToAuditors(mixed, [
+      { name: 'A', base: waw },
+      { name: 'B', base: gda }
+    ]);
+
+    equals('powstały dwa zadania', assigned.length, 2);
+
+    var forWaw = assigned.filter(function(a){ return a.origin.baseId === waw.id; })[0];
+    var forGda = assigned.filter(function(a){ return a.origin.baseId === gda.id; })[0];
+
+    check('każda baza dostała zadanie', !!forWaw && !!forGda);
+
+    if(forWaw && forGda){
+      var wawIds = nearWaw.map(function(s){ return s.id; });
+      var gdaIds = nearGda.map(function(s){ return s.id; });
+
+      check('stacje spod ' + waw.name + ' trafiły do właściwego zespołu',
+        forWaw.stations.every(function(s){ return wawIds.indexOf(s.id) !== -1; }),
+        'zespół z ' + waw.name + ' dostał stacje spod drugiej bazy');
+
+      check('stacje spod ' + gda.name + ' trafiły do właściwego zespołu',
+        forGda.stations.every(function(s){ return gdaIds.indexOf(s.id) !== -1; }),
+        'zespół z ' + gda.name + ' dostał stacje spod drugiej bazy');
+
+      equals('żadna stacja nie zginęła',
+        forWaw.stations.length + forGda.stations.length, 16);
+    }
+
+    // Dwóch kontrolerów z tej samej bazy dzieli się jej stacjami
+    var sameBase = API.assignStationsToAuditors(nearWaw, [
+      { name: 'A', base: waw },
+      { name: 'B', base: waw }
+    ]);
+    equals('dwóch kontrolerów z jednej bazy = dwa zadania', sameBase.length, 2);
+    equals('stacje rozdzielone bez strat',
+      sameBase.reduce(function(a, x){ return a + x.stations.length; }, 0), 8);
+    check('oba zadania startują z tej samej bazy',
+      sameBase.every(function(x){ return x.origin.baseId === waw.id; }));
+
+    // Baza bez stacji nie tworzy pustego zadania
+    var onlyWaw = API.assignStationsToAuditors(nearWaw, [{ name: 'A', base: waw }]);
+    equals('jeden kontroler = jedno zadanie', onlyWaw.length, 1);
+  }
+
+  /* =======================================================================
+     9. TRYB ROZSZERZONY — KONFIGUROWALNE REGUŁY DELEGACJI
+     ======================================================================= */
+
+  section('9. Tryb rozszerzony — konfigurowalne reguły delegacji');
+
+  var savedDefaults = RouteEngine.getDefaultRules();
+  equals('domyślny budżet dnia to 8 godz', savedDefaults.baseDayMin, 8 * 60);
+  equals('domyślny twardy limit to 11 godz', savedDefaults.maxDayMin, 11 * 60);
+  equals('domyślna przerwa to 60 min', savedDefaults.breakMin, 60);
+  equals('domyślny próg wielodniowy to 100 km', savedDefaults.multidayMinKm, 100);
+
+  RouteEngine.configureRules({ baseDayMin: 300, maxDayMin: 400, breakMin: 30, multidayMinKm: 50 });
+  var custom = RouteEngine.getRules();
+  equals('configureRules() zmienia budżet dnia', custom.baseDayMin, 300);
+  equals('configureRules() zmienia twardy limit', custom.maxDayMin, 400);
+  equals('configureRules() zmienia przerwę', custom.breakMin, 30);
+  equals('configureRules() zmienia próg wielodniowy', custom.multidayMinKm, 50);
+
+  check('gettery RouteEngine.BASE_DAY_MIN/MAX_DAY_MIN pokazują nową konfigurację',
+    RouteEngine.BASE_DAY_MIN === 300 && RouteEngine.MAX_DAY_MIN === 400,
+    'BASE_DAY_MIN=' + RouteEngine.BASE_DAY_MIN + ', MAX_DAY_MIN=' + RouteEngine.MAX_DAY_MIN);
+
+  // Sprzeczna konfiguracja z UI (limit niższy niż budżet) — silnik się zabezpiecza
+  RouteEngine.configureRules({ baseDayMin: 500, maxDayMin: 400 });
+  equals('twardy limit nie może być niższy niż budżet dnia — dopasowany w górę',
+    RouteEngine.getRules().maxDayMin, 500);
+
+  // Nieprawidłowe wartości (ujemne, nieliczbowe) są ignorowane, poprzednia wartość zostaje
+  var beforeInvalid = RouteEngine.getRules().baseDayMin;
+  RouteEngine.configureRules({ baseDayMin: -10, breakMin: 'abc' });
+  equals('ujemna/nieliczbowa wartość jest odrzucana', RouteEngine.getRules().baseDayMin, beforeInvalid);
+
+  // Zmiana reguł ma natychmiastowy wpływ na wykonalność harmonogramu
+  RouteEngine.configureRules({ baseDayMin: 480, maxDayMin: 600, breakMin: 60, multidayMinKm: 100 });
+  var feasibleBefore = RouteEngine.evaluateSchedule([0, 1, 2], [[0, 30, 60], [30, 0, 30], [60, 30, 0]], 120, 1);
+  check('harmonogram wykonalny przy standardowym limicie', feasibleBefore !== null);
+
+  RouteEngine.configureRules({ maxDayMin: 60, baseDayMin: 50 });
+  var infeasibleAfter = RouteEngine.evaluateSchedule([0, 1, 2], [[0, 30, 60], [30, 0, 30], [60, 30, 0]], 120, 1);
+  check('ten sam harmonogram staje się niewykonalny po zaostrzeniu limitu dnia',
+    infeasibleAfter === null,
+    'oczekiwano null po ustawieniu maxDayMin=60, otrzymano: ' + JSON.stringify(infeasibleAfter));
+
+  RouteEngine.resetToDefaultRules();
+  var afterReset = RouteEngine.getRules();
+  check('resetToDefaultRules() przywraca wartości fabryczne',
+    afterReset.baseDayMin === savedDefaults.baseDayMin &&
+    afterReset.maxDayMin === savedDefaults.maxDayMin &&
+    afterReset.breakMin === savedDefaults.breakMin &&
+    afterReset.multidayMinKm === savedDefaults.multidayMinKm,
+    'otrzymano: ' + JSON.stringify(afterReset));
+
+  if(API && API.PLANNING_DEFAULTS){
+    var pd = API.PLANNING_DEFAULTS;
+    equals('PLANNING_DEFAULTS.auditMin zgodny z CONFIG.AUDIT_MIN', pd.auditMin, API.CONFIG.AUDIT_MIN);
+    check('PLANNING_DEFAULTS.dayOptions zgodne z CONFIG.PLAN_DAY_OPTIONS',
+      JSON.stringify(pd.dayOptions) === JSON.stringify(API.CONFIG.PLAN_DAY_OPTIONS),
+      'otrzymano: ' + JSON.stringify(pd.dayOptions));
+  }
+
+  if(API && API.buildPlansForAllVariants){
+    var planOrigin = { lat: 52.2297, lng: 21.0122, baseId: 'waw' };
+    var planStations = makeStations(6, 52.6, 22.4, 1.6);
+    var planPoints = [planOrigin].concat(planStations);
+    var planMatrices = makeMatrices(planPoints);
+    var clusterResult = {
+      auditorName: 'Test',
+      origin: planOrigin,
+      durMatrix: planMatrices.dur,
+      distMatrix: planMatrices.dist,
+      candidates: planStations.map(function(s, i){ return { station: s, idx: i + 1 }; })
+    };
+
+    var customPlans = API.buildPlansForAllVariants([clusterResult], {
+      auditMin: 45, dayOptions: [1, 3], baseDayMin: 480, maxDayMin: 660, breakMin: 60, multidayMinKm: 100
+    });
+
+    check('buildPlansForAllVariants zwraca plany tylko dla podanych wariantów dni',
+      customPlans.every(function(p){ return p.days === 1 || p.days === 3; }),
+      'dni w planach: ' + customPlans.map(function(p){ return p.days; }).join(', '));
+
+    var withCustomAudit = customPlans.filter(function(p){ return p.routes.length > 0; })[0];
+    if(withCustomAudit){
+      check('trasa zapamiętuje niestandardowy czas kontroli',
+        withCustomAudit.routes[0].auditMin === 45,
+        'auditMin = ' + withCustomAudit.routes[0].auditMin);
+    }
+  }
+
+  /* =======================================================================
+     PODSUMOWANIE
+     ======================================================================= */
+
+  var banner = document.getElementById('banner');
+  var hint = document.getElementById('hint');
+  var total = passed + failed;
+
+  if(failed === 0){
+    banner.className = 'pass';
+    banner.textContent = '✓ Wszystko działa — ' + passed + ' z ' + total + ' testów przeszło.';
+    hint.textContent = 'Możesz bezpiecznie otworzyć index.html i korzystać z aplikacji.';
+  } else {
+    banner.className = 'fail';
+    banner.textContent = '✗ Wykryto problemy — ' + failed + ' z ' + total + ' testów nie przeszło.';
+    hint.textContent = 'Poszukaj czerwonych pozycji poniżej. Jeśli testów jest znacznie ' +
+      'mniej niż zwykle, prawdopodobnie w którymś pliku .js jest błąd składni — ' +
+      'naciśnij F12 i sprawdź zakładkę Console.';
+  }
+})();
+</script>
+</body>
+</html>
